@@ -7,8 +7,8 @@ GREEN='\033[0;32m'
 ORANGE='\033[0;33m'
 NC='\033[0m'
 
-REPO_DIR=~/owl
-REPO_URL=https://github.com/geezacoleman/OpenWeedLocator.git
+REPO_DIR=~/OpenWeedLocatorHnVCAD
+REPO_URL=https://github.com/HJHnVCAD/OpenWeedLocatorHnVCAD.git
 CONFIG_PATH="config/*.ini"
 
 echo -e "${ORANGE}[INFO] Starting OWL updater...${NC}"
