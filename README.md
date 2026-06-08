@@ -66,19 +66,20 @@ OWL is a camera-based weed detection system based on the Raspberry Pi that uses 
 2/ Enter Writing Mode on IO board Compute 5
 
 Connect BOOT and GND, set the switch to ON, or just connect the USB-C port. You can check the product page to understand the location of the BOOT pin, for example
-https://www.waveshare.com/w/upload/thumb/e/e7/CM4_Burn_EMMC_1.png/900px-CM4_Burn_EMMC_1.png
+https://github.com/HJHnVCAD/OpenWeedLocator2026/tree/main/docs/900px-CM4_Burn_EMMC_1.png
+
 
 Connect the Micro USB/Type C interface (SLAVE port) of the carrier board to the host PC, then connect a power adapter to the cattier board.
 
 After connecting, the boards should be recognized as BCMxxx devices on Windows PC.
-https://www.waveshare.com/w/upload/thumb/4/4a/CM4_Burn_EMMC_4.png/200px-CM4_Burn_EMMC_4.png
+https://github.com/HJHnVCAD/OpenWeedLocator2026/tree/main/docs/200px-CM4_Burn_EMMC_4.png
 
 Run the rpiboot.exe as administrator (The software in the installation directory of Step 2)
 link "C:\Program Files (x86)\Raspberry Pi\rpi-mass-storage-gadget64.bat"
-https://www.waveshare.com/w/upload/0/06/CM4_Burn_EMMC_5.png
+https://github.com/HJHnVCAD/OpenWeedLocator2026/tree/main/docs/CM4_Burn_EMMC_5.png
 
 Then the boards will be recognized as a portable disk, just format and write it with a new image.
-https://www.waveshare.com/w/upload/thumb/7/7b/CM4_Burn_EMMC_6.png/200px-CM4_Burn_EMMC_6.png
+https://github.com/HJHnVCAD/OpenWeedLocator2026/tree/main/docs/200px-CM4_Burn_EMMC_6.png
 
 
 3 / Install DEBIAN Trixie OS (64 bit) on CM5 module (Bookworm or Trixie OS) with Raspberry Imager (C:\Program Files (x86)\Raspberry Pi Imager):
