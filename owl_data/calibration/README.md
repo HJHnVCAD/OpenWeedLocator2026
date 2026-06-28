@@ -25,3 +25,4 @@ owl_data/
 ```
 
 L'autocalibration prend une photo automatiquement dès que le damier est present dans le champ de vision à un intervalle de 5 secondes
+Paramètre ligne 575 dans owl.py
