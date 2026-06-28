@@ -95,18 +95,31 @@ with Services :
 
 5/ connected with shh console how "Putty"
 
-6/ If you don't use environnement, before install OpenWeedLocator, install opencv2 for python (opencv-python==4.6.0.66):
-
+used camera reference 
+7/ installation de la camera Sony IMX477
+en ssh :
 ```bash
-# Clone and install on Raspberry Pi (Bookworm or Trixie OS)
-sudo apt-get install libopencv-dev python3-opencv
-#or
-sudo apt install python3-opencv==4.6.0.66
-# or
-pip install opencv-python==4.6.0.66
-#to control the installation
-python3 -c "import cv2; print(cv2.__version__)"
-# 4.10.0
+# Edit the file of config on Raspberry Pi (Bookworm or Trixie OS)
+sudo nano /boot/firmware/config.txt
+# put/modification of the line 
+camera_auto_detect=1 to camera_auto_detect=0
+# add directly under this line 
+dtoverlay=imx477,cam0,always-on
+# save and exit
+sudo reboot
+# to test the video stream
+rpicam-hello --timeout 0
+
+```
+8/ activation du démarrage automatique du CM5:
+```bash
+sudo -E rpi-eeprom-config --edit
+# ajout ou modifie 
+POWER_OFF_ON_HALT=0
+WAKE_ON_GPIO=0
+# enregistre et redemmarre
+sudo reboot
+
 ```
 
 After, execute this command, with acces public to git repositories:
@@ -115,6 +128,8 @@ After, execute this command, with acces public to git repositories:
 # Clone and install on Raspberry Pi (Bookworm or Trixie OS)
 git clone https://github.com/HJHnVCAD/OpenWeedLocatorHnVCAD.git owl
 bash owl/owl_setup.sh
+
+sudo nano owl/config/GENERAL_CONFIG.ini
 ```
 
 **INSTALL CONTROLLER :Set up the central controller Pi**
@@ -129,7 +144,7 @@ This installs the MQTT broker, the networked dashboard, configures WiFi with a s
 # On each OWL Pi
 
 sudo bash owl/owl_setup.sh
-
+# When prompted "Enter controller type [none/ute/advanced] (default: none):" =>  none
 # When prompted "Do you want to add a web dashboard?" -> yes
 # When prompted for mode -> select "Networked"
 # Enter the central controller's IP when prompted
@@ -149,11 +164,115 @@ To confirm, run `sudo systemctl status owl.service` or `sudo journalctl -u owl.s
 
 See the [two step installation guide](https://docs.openweedlocator.org/en/latest/software/index.html) for detailed instructions.
 
+
+
+**USED NO USB DRIVE: modification fichier .py**
+Used NO USB Drive:
+
+In GENERAL CONFIG .ini
+
+save_directory = /home/owl/owl/owl_data
+
+In the directory_manager.py  replace the function 
+
+line 140
+```bash
+def _try_setup_directories(self):
+        # Normalize configured path so relative paths resolve predictably.
+        self.save_directory = os.path.abspath(os.path.expanduser(self.save_directory))
+        self.save_subdirectory = os.path.join(self.save_directory, datetime.now().strftime('%Y%m%d'))
+
+        if os.path.ismount(self.save_directory):
+            os.makedirs(self.save_subdirectory, exist_ok=True)
+            if not self.test_file_write():
+                raise errors.USBWriteError("Failed to write test file")
+
+            self.logger.info(f"[SUCCESS] Directory setup complete: {self.save_subdirectory}")
+            return self.save_directory, self.save_subdirectory
+
+        # On Linux, allow explicit local directories (eMMC/SD) outside /media.
+        if platform.system() == 'Linux':
+            media_root = os.path.abspath('/media')
+            common_path = os.path.commonpath([self.save_directory, media_root])
+            if common_path != media_root:
+                os.makedirs(self.save_subdirectory, exist_ok=True)
+                if not self.test_file_write():
+                    raise errors.USBWriteError("Failed to write test file")
+
+                self.logger.info(f"[SUCCESS] Using local storage directory: {self.save_subdirectory}")
+                return self.save_directory, self.save_subdirectory
+
+            return self._handle_mount_error()
+
+        return self._handle_mount_error()
+```        
+
 ---
 ---
+
 
 ## Troubleshooting  / Utility ##
 
+**PIP ERROR SPACE LEFT DURING INSTALL SENSOR OWL :**
+
+La partition racine / a 46 Go libres, donc ce n’est pas un problème de partition disque.
+Le vrai suspect est /tmp, qui est un tmpfs de 2.0 Go (mémoire RAM/swap), pas du stockage SD.
+pip utilise tempfile (on le voit dans ta trace), donc il écrit probablement dans /tmp et atteint la limite de 2 Go, d’où Errno 28.
+Conclusion: tu n’as pas besoin d’agrandir la partition. Il faut déplacer les fichiers temporaires pip hors de /tmp.
+
+Fais ça manuellmeent sur le Pi:
+
+Créer des dossiers temporaires sur le disque (partition /)
+
+mkdir -p /home/owl/pip-tmp /home/owl/pip-cache
+
+Activer l’environnement
+source /home/owl/.virtualenvs/owl/bin/activate
+
+Relancer l’installation GoG en forçant temp/cache sur disque
+TMPDIR=/home/owl/pip-tmp PIP_CACHE_DIR=/home/owl/pip-cache PIP_NO_CACHE_DIR=1 pip install -r /home/owl/owl/requirements-gog.txt
+
+Optionnel: pendant l’installation, surveiller en parallèle
+watch -n 1 "df -h /tmp /home/owl"
+
+Vérification utile (si ça échoue encore):
+df -i
+Si les inodes sont à 100%, on aura le même type d’erreur même avec de l’espace libre.
+
+Si tu veux, je peux aussi te proposer une petite modification de ton script d’installation pour qu’il applique automatiquement TMPDIR/PIP_NO_CACHE_DIR quand GoG est activé, afin d’éviter ce problème à l’avenir.
+dans owl_setup.h ;  ligne 426 : 
+"
+    pip install -r requirements-gog.txt
+"
+remplacer par
+"
+    # Use disk-backed temp/cache dirs to avoid exhausting /tmp tmpfs on Raspberry Pi.
+    PIP_TMP_DIR="$HOME/pip-tmp"
+    PIP_CACHE_DIR_LOCAL="$HOME/pip-cache"
+    mkdir -p "$PIP_TMP_DIR" "$PIP_CACHE_DIR_LOCAL"
+    if ! TMPDIR="$PIP_TMP_DIR" PIP_CACHE_DIR="$PIP_CACHE_DIR_LOCAL" PIP_NO_CACHE_DIR=1 pip install -r requirements-gog.txt; then
+      echo -e "${RED}[ERROR] GoG dependency install failed. Try checking free space and inodes with: df -h /tmp $HOME ; df -i${NC}"
+      false
+    fi
+"
+
+If you don't use environnement, before install OpenWeedLocator, install opencv2 for python (opencv-python==4.6.0.66):
+
+```bash
+# Clone and install on Raspberry Pi (Bookworm or Trixie OS)
+sudo apt-get install libopencv-dev python3-opencv
+#or
+sudo apt install python3-opencv==4.6.0.66
+# or
+pip install opencv-python==4.6.0.66
+#to control the installation
+python3 -c "import cv2; print(cv2.__version__)"
+# 4.10.0
+
+```
+
+
+**ERROR SPACE LEFT DURING INSTALL SENSOR OWL :**
 This guide covers common issues and solutions for both software and hardware problems with the OWL system.
 
 ```{admonition} Report Issues

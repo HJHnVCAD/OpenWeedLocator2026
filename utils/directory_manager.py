@@ -138,16 +138,33 @@ class DirectorySetup:
         raise errors.NoWritableUSBError()
 
     def _try_setup_directories(self):
+        # Normalize configured path so relative paths resolve predictably.
+        self.save_directory = os.path.abspath(os.path.expanduser(self.save_directory))
         self.save_subdirectory = os.path.join(self.save_directory, datetime.now().strftime('%Y%m%d'))
-        if not os.path.ismount(self.save_directory):
+
+        if os.path.ismount(self.save_directory):
+            os.makedirs(self.save_subdirectory, exist_ok=True)
+            if not self.test_file_write():
+                raise errors.USBWriteError("Failed to write test file")
+
+            self.logger.info(f"[SUCCESS] Directory setup complete: {self.save_subdirectory}")
+            return self.save_directory, self.save_subdirectory
+
+        # On Linux, allow explicit local directories (eMMC/SD) outside /media.
+        if platform.system() == 'Linux':
+            media_root = os.path.abspath('/media')
+            common_path = os.path.commonpath([self.save_directory, media_root])
+            if common_path != media_root:
+                os.makedirs(self.save_subdirectory, exist_ok=True)
+                if not self.test_file_write():
+                    raise errors.USBWriteError("Failed to write test file")
+
+                self.logger.info(f"[SUCCESS] Using local storage directory: {self.save_subdirectory}")
+                return self.save_directory, self.save_subdirectory
+
             return self._handle_mount_error()
 
-        os.makedirs(self.save_subdirectory, exist_ok=True)
-        if not self.test_file_write():
-            raise errors.USBWriteError("Failed to write test file")
-
-        self.logger.info(f"[SUCCESS] Directory setup complete: {self.save_subdirectory}")
-        return self.save_directory, self.save_subdirectory
+        return self._handle_mount_error()
 
     def _handle_mount_error(self):
         """

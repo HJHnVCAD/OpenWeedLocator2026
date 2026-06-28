@@ -190,7 +190,7 @@ test_camera_functionality() {
     echo -e "${GREEN}[INFO] Retesting camera after full upgrade...${NC}"
     ${test_cmd} > /dev/null 2>&1
     if [ $? -ne 0 ]; then
-      echo -e "${RED}[CRITICAL ERROR] Camera still not working after full upgrade. Please log an issue: https://github.com/HJHnVCAD/OpenWeedLocator2026/issues${NC}"
+      echo -e "${RED}[CRITICAL ERROR] Camera still not working after full upgrade. Please log an issue: https://github.com/geezacoleman/OpenWeedLocator/issues${NC}"
       STATUS_CAMERA_TEST="${CROSS}"
       ERROR_CAMERA_TEST="Camera test failed in mode '${mode}'"
     else
