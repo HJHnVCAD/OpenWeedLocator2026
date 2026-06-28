@@ -572,7 +572,7 @@ class Owl:
 
         self._autocalib_active = False
         self._autocalib_lock = threading.Lock()
-        self._autocalib_interval_sec = 0.25
+        self._autocalib_interval_sec = 5.0     # intervall between captures in seconds
         self._autocalib_last_capture_ts = 0.0
         self._autocalib_pattern_size = (9, 6)  # inner corners
         self._autocalib_square_size_mm = 20.0

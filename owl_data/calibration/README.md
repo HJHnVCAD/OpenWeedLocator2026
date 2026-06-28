@@ -1,5 +1,5 @@
 
-## Data store without USB Drive is this folder Structure
+## Data store in this folder Structure
 
 Before, in 'GENERAL_CONFIG.ini':
 ```
@@ -18,13 +18,10 @@ owl_data/
 │   ├── perspective_matrix.npy
 │   ├── calibration_meta.json
 │   ├── camera_matrix.npy
-│   └── dist_coeffs.npy
-├── sessioncapture001/    folder for image of session recording
-│   ├── image1.jpg
-│   ├── image2.jpg
-│   ├── image3.jpg  
-├── sessioncapture002/
-│   ├── ...        
-└── README.md              # This file
+│   ├── dist_coeffs.npy
+│   └── README.md              # This file
+|
 
 ```
+
+L'autocalibration prend une photo automatiquement dès que le damier est present dans le champ de vision à un intervalle de 5 secondes
