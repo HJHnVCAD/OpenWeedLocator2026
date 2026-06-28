@@ -117,6 +117,35 @@ function updateSystemStats() {
             if (typeof updateAlgorithmError === 'function') {
                 updateAlgorithmError(data.algorithm_error);
             }
+
+            var perspectiveToggleBtn = document.getElementById('perspectiveToggleBtn');
+            var perspectiveToggleState = document.getElementById('perspectiveToggleState');
+            if (perspectiveToggleBtn) {
+                var pEnabled = !!data.enable_perspective_transform;
+                perspectiveToggleBtn.setAttribute('aria-pressed', pEnabled ? 'true' : 'false');
+                perspectiveToggleBtn.classList.toggle('on', pEnabled);
+                if (perspectiveToggleState) perspectiveToggleState.textContent = pEnabled ? 'ON' : 'OFF';
+            }
+
+            // Perspective autocalibration status
+            var calibState = document.getElementById('perspectiveCalibrateState');
+            if (calibState) {
+                var st = (data.perspective_calibration_status || 'idle').toLowerCase();
+                var prog = data.perspective_calibration_progress || 0;
+                var captured = data.perspective_calibration_captured || 0;
+                var target = data.perspective_calibration_target || 30;
+                if (st === 'capturing') {
+                    calibState.textContent = `${captured}/${target}`;
+                } else if (st === 'ready') {
+                    calibState.textContent = 'Ready';
+                } else if (st === 'cancelled') {
+                    calibState.textContent = 'Cancelled';
+                } else if (st === 'error') {
+                    calibState.textContent = 'Error';
+                } else {
+                    calibState.textContent = !!data.enable_perspective_transform ? 'ON' : 'OFF';
+                }
+            }
         })
         .catch(err => {
             // Silent fail for stats polling

@@ -146,6 +146,33 @@
                         </button>
                     </div>
 
+                    <div class="mode-panel">
+                        <div class="mode-panel-title">Perspective</div>
+                        <div class="hero-split-row">
+                            <button class="owl-switch" id="perspectiveToggleBtn" aria-pressed="false">
+                                <span class="switch-label">
+                                    <strong>Perspective</strong>
+                                </span>
+                                <span class="switch-state" id="perspectiveToggleState">OFF</span>
+                            </button>
+                            <button class="owl-switch" id="perspectiveCalibrateBtn" aria-pressed="false">
+                                <span class="switch-label">
+                                    <svg aria-hidden viewBox="0 0 24 24" class="switch-icon">
+                                        <path fill="currentColor" d="M3,3H9V5H5V9H3V3M15,3H21V9H19V5H15V3M3,15H5V19H9V21H3V15M19,15H21V21H15V19H19V15M7,7H11V11H7V7M13,7H17V11H13V7M7,13H11V17H7V13M13,13H17V17H13V13Z"/>
+                                    </svg>
+                                    <strong>Auto-Calib</strong>
+                                </span>
+                                <span class="switch-state" id="perspectiveCalibrateState">Start</span>
+                            </button>
+                        </div>
+                        <button class="owl-switch" id="perspectiveCancelBtn" aria-pressed="false">
+                            <span class="switch-label">
+                                <strong>Cancel Calibration</strong>
+                            </span>
+                            <span class="switch-state">Stop</span>
+                        </button>
+                    </div>
+
                     <!-- Session info (collapsible) -->
                     <div class="session-info" id="sessionInfo">
                         <button class="session-info-toggle" id="sessionInfoToggle" type="button">

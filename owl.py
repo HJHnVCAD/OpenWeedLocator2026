@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import os
 import sys
+import json
 
 import logging
 import argparse
@@ -171,6 +172,11 @@ class Owl:
                            self.config.getint('Camera', 'resolution_height'))
         self.exp_compensation = self.config.getint('Camera', 'exp_compensation')
         self.camera_type = self.config.get('Camera', 'camera_type', fallback='auto')
+        self.enable_perspective_transform = self.config.getboolean(
+            'Camera',
+            'enable_perspective_transform',
+            fallback=self.config.getboolean('Camera', 'enable_perspective_trasnform', fallback=False)
+        )
 
         # Relay Dict maps the reference relay number to a boardpin on the embedded device
         self.relay_dict = {}
@@ -542,9 +548,255 @@ class Owl:
         else:
             self.logger.error('[ERROR] No frame width or frame height provided.')
 
+        self._init_perspective_transform()
+
     @property
     def config_path(self):
         return self._config_path
+
+    def _get_calibration_dir(self):
+        base_dir = getattr(self, 'save_directory', None)
+        if not base_dir:
+            base_dir = self.config.get('DataCollection', 'save_directory', fallback='owl_data')
+        base_dir = os.path.abspath(os.path.expanduser(base_dir))
+        return os.path.join(base_dir, 'calibration')
+
+    def _init_perspective_transform(self):
+        self._perspective_matrix = None
+        self._perspective_output_size = None
+        self._perspective_status = 'idle'
+        self._perspective_progress = 0
+        self._perspective_target = 30
+        self._perspective_captured = 0
+        self._perspective_last_error = ''
+
+        self._autocalib_active = False
+        self._autocalib_lock = threading.Lock()
+        self._autocalib_interval_sec = 0.25
+        self._autocalib_last_capture_ts = 0.0
+        self._autocalib_pattern_size = (9, 6)  # inner corners
+        self._autocalib_square_size_mm = 20.0
+        self._autocalib_objpoints = []
+        self._autocalib_imgpoints = []
+        self._autocalib_saved_count = 0
+        self._autocalib_last_corners = None
+
+        self._load_perspective_matrix()
+
+    def _load_perspective_matrix(self):
+        cal_dir = self._get_calibration_dir()
+        matrix_path = os.path.join(cal_dir, 'perspective_matrix.npy')
+        if not os.path.exists(matrix_path):
+            return
+
+        try:
+            matrix = np.load(matrix_path)
+            if matrix.shape != (3, 3):
+                raise ValueError(f'Invalid perspective matrix shape: {matrix.shape}')
+            self._perspective_matrix = matrix.astype(np.float32)
+            if self.frame_width and self.frame_height:
+                self._perspective_output_size = (int(self.frame_width), int(self.frame_height))
+            self.logger.info(f"[INFO] Loaded perspective matrix from {matrix_path}")
+        except Exception as e:
+            self._perspective_matrix = None
+            self._perspective_last_error = str(e)
+            self.logger.warning(f"[WARNING] Failed to load perspective matrix: {e}")
+
+    def request_perspective_autocalibration(self, captures=30):
+        captures = max(4, int(captures))
+        cal_dir = self._get_calibration_dir()
+        os.makedirs(cal_dir, exist_ok=True)
+
+        # Keep only recent run's capture images to limit disk growth.
+        for name in os.listdir(cal_dir):
+            if name.startswith('capture_') and name.endswith('.jpg'):
+                try:
+                    os.remove(os.path.join(cal_dir, name))
+                except OSError:
+                    pass
+
+        with self._autocalib_lock:
+            self._perspective_target = captures
+            self._autocalib_active = True
+            self._autocalib_objpoints = []
+            self._autocalib_imgpoints = []
+            self._autocalib_saved_count = 0
+            self._autocalib_last_corners = None
+            self._autocalib_last_capture_ts = 0.0
+            self._perspective_status = 'capturing'
+            self._perspective_progress = 0
+            self._perspective_captured = 0
+            self._perspective_last_error = ''
+
+        self.logger.info(
+            f"[INFO] Perspective autocalibration started: target={captures}, pattern=9x6, square=20mm")
+
+    def _run_perspective_autocalibration_step(self, frame):
+        if frame is None:
+            return
+
+        with self._autocalib_lock:
+            if not self._autocalib_active:
+                return
+            if (time.time() - self._autocalib_last_capture_ts) < self._autocalib_interval_sec:
+                return
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        flags = cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_NORMALIZE_IMAGE
+        found, corners = cv2.findChessboardCorners(gray, self._autocalib_pattern_size, flags)
+
+        if not found:
+            return
+
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 40, 0.001)
+        corners_refined = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
+
+        cols, rows = self._autocalib_pattern_size
+        objp = np.zeros((rows * cols, 3), np.float32)
+        objp[:, :2] = np.mgrid[0:cols, 0:rows].T.reshape(-1, 2)
+        objp *= self._autocalib_square_size_mm
+
+        with self._autocalib_lock:
+            if not self._autocalib_active:
+                return
+            self._autocalib_objpoints.append(objp)
+            self._autocalib_imgpoints.append(corners_refined)
+            self._autocalib_saved_count += 1
+            self._autocalib_last_corners = corners_refined.copy()
+            self._autocalib_last_capture_ts = time.time()
+            self._perspective_progress = min(100, int(100 * self._autocalib_saved_count / self._perspective_target))
+            self._perspective_captured = self._autocalib_saved_count
+
+            capture_idx = self._autocalib_saved_count
+            target = self._perspective_target
+
+        cal_dir = self._get_calibration_dir()
+        preview = frame.copy()
+        cv2.drawChessboardCorners(preview, self._autocalib_pattern_size, corners_refined, True)
+        capture_path = os.path.join(cal_dir, f'capture_{capture_idx:03d}.jpg')
+        cv2.imwrite(capture_path, preview)
+        self.logger.info(f"[INFO] Calibration frame validated: {capture_idx}/{target} -> {capture_path}")
+
+        if capture_idx >= target:
+            self._finalize_perspective_autocalibration(gray.shape[::-1])
+
+    def _finalize_perspective_autocalibration(self, image_size):
+        with self._autocalib_lock:
+            objpoints = list(self._autocalib_objpoints)
+            imgpoints = list(self._autocalib_imgpoints)
+            corners = None if self._autocalib_last_corners is None else self._autocalib_last_corners.copy()
+            target = self._perspective_target
+
+        if len(objpoints) < 4 or len(imgpoints) < 4 or corners is None:
+            with self._autocalib_lock:
+                self._autocalib_active = False
+                self._perspective_status = 'error'
+                self._perspective_last_error = 'Not enough validated chessboard frames'
+            return
+
+        cal_dir = self._get_calibration_dir()
+        os.makedirs(cal_dir, exist_ok=True)
+
+        try:
+            rms, camera_matrix, dist_coeffs, _, _ = cv2.calibrateCamera(
+                objpoints,
+                imgpoints,
+                image_size,
+                None,
+                None,
+            )
+
+            board_w, board_h = self._autocalib_pattern_size
+            src = np.float32([
+                corners[0][0],
+                corners[board_w - 1][0],
+                corners[-1][0],
+                corners[(board_h - 1) * board_w][0],
+            ])
+
+            out_w = int(self.frame_width or image_size[0])
+            out_h = int(self.frame_height or image_size[1])
+            dst = np.float32([
+                [0, 0],
+                [out_w - 1, 0],
+                [out_w - 1, out_h - 1],
+                [0, out_h - 1],
+            ])
+
+            perspective_matrix = cv2.getPerspectiveTransform(src, dst)
+
+            np.save(os.path.join(cal_dir, 'camera_matrix.npy'), camera_matrix)
+            np.save(os.path.join(cal_dir, 'dist_coeffs.npy'), dist_coeffs)
+            np.save(os.path.join(cal_dir, 'perspective_matrix.npy'), perspective_matrix)
+
+            metadata = {
+                'timestamp': datetime.now().isoformat(timespec='seconds'),
+                'captures': len(objpoints),
+                'target_captures': target,
+                'pattern_inner_corners': [board_w, board_h],
+                'square_size_mm': self._autocalib_square_size_mm,
+                'calibration_rms': float(rms),
+                'output_size': [out_w, out_h],
+            }
+            with open(os.path.join(cal_dir, 'calibration_meta.json'), 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2)
+
+            with self._autocalib_lock:
+                self._perspective_matrix = perspective_matrix.astype(np.float32)
+                self._perspective_output_size = (out_w, out_h)
+                self._autocalib_active = False
+                self._perspective_status = 'ready'
+                self._perspective_progress = 100
+                self._perspective_captured = len(objpoints)
+                self.enable_perspective_transform = True
+                if hasattr(self, 'config'):
+                    if not self.config.has_section('Camera'):
+                        self.config.add_section('Camera')
+                    self.config.set('Camera', 'enable_perspective_transform', 'True')
+                    self.config.set('Camera', 'enable_perspective_trasnform', 'True')
+
+            self.logger.info(
+                f"[SUCCESS] Perspective calibration complete. Matrix saved in {cal_dir}")
+
+        except Exception as e:
+            with self._autocalib_lock:
+                self._autocalib_active = False
+                self._perspective_status = 'error'
+                self._perspective_last_error = str(e)
+            self.logger.error(f"[ERROR] Perspective autocalibration failed: {e}", exc_info=True)
+
+    def cancel_perspective_autocalibration(self):
+        with self._autocalib_lock:
+            if not self._autocalib_active:
+                return False
+            self._autocalib_active = False
+            self._perspective_status = 'cancelled'
+            self._perspective_last_error = ''
+        self.logger.info('[INFO] Perspective autocalibration cancelled by user')
+        return True
+
+    def perspective_transform(self, frame):
+        if frame is None:
+            return frame
+        if not self.enable_perspective_transform:
+            return frame
+        if self._perspective_matrix is None:
+            return frame
+
+        out_size = self._perspective_output_size
+        if not out_size:
+            h, w = frame.shape[:2]
+            out_size = (w, h)
+
+        try:
+            return cv2.warpPerspective(frame, self._perspective_matrix, out_size)
+        except Exception as e:
+            self.logger.error(f"[ERROR] perspective_transform failed: {e}")
+            return frame
+
+    def perpective_tranform(self, frame):
+        # Compatibility alias (intentionally preserves the historic misspelling).
+        return self.perspective_transform(frame)
 
     def hoot(self):
         # Signal successful boot with LED blink
@@ -635,6 +887,9 @@ class Owl:
                     self.logger.info("[INFO] Frame is None. Stopped.")
                     self.stop()
                     break
+
+                self._run_perspective_autocalibration_step(frame)
+                frame = self.perpective_tranform(frame)
 
                 # Reset tracker when detection toggled off
                 if prev_detection_enable and not self._detection_enable:

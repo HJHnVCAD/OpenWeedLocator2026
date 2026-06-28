@@ -178,6 +178,27 @@ async function updateDashboard() {
             if (typeof updateModeAvailability === 'function') {
                 updateModeAvailability(!!firstOwl.model_available);
             }
+
+            var perspectiveStateEl = document.getElementById('main-perspective-state');
+            var perspectiveToggleBtn = document.getElementById('main-perspective-toggle-btn');
+            if (perspectiveStateEl) {
+                var pStatus = String(firstOwl.perspective_calibration_status || 'idle').toLowerCase();
+                var pCaptured = firstOwl.perspective_calibration_captured || 0;
+                var pTarget = firstOwl.perspective_calibration_target || 30;
+                if (pStatus === 'capturing') {
+                    perspectiveStateEl.textContent = 'Perspective: ' + pCaptured + '/' + pTarget;
+                } else {
+                    perspectiveStateEl.textContent = 'Perspective: ' + pStatus;
+                }
+            }
+            if (perspectiveToggleBtn) {
+                var pEnabled = !!firstOwl.enable_perspective_transform;
+                perspectiveToggleBtn.classList.toggle('active', pEnabled);
+                perspectiveToggleBtn.textContent = pEnabled
+                    ? 'Perspective: ON'
+                    : 'Perspective: OFF';
+            }
+
             // Sync slider values from OWL state so dashboard matches device
             syncConfigFromOWLState(firstOwl);
             // Check for config mismatch across OWLs

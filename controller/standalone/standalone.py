@@ -524,6 +524,13 @@ class OWLDashboard:
                 # Camera resolution
                 'resolution_width': mqtt_state.get('resolution_width', 0),
                 'resolution_height': mqtt_state.get('resolution_height', 0),
+                # Perspective transform
+                'enable_perspective_transform': mqtt_state.get('enable_perspective_transform', False),
+                'perspective_calibration_status': mqtt_state.get('perspective_calibration_status', 'idle'),
+                'perspective_calibration_progress': mqtt_state.get('perspective_calibration_progress', 0),
+                'perspective_calibration_target': mqtt_state.get('perspective_calibration_target', 30),
+                'perspective_calibration_captured': mqtt_state.get('perspective_calibration_captured', 0),
+                'perspective_calibration_error': mqtt_state.get('perspective_calibration_error', ''),
             })
 
             return jsonify(stats)
@@ -563,6 +570,69 @@ class OWLDashboard:
                 })
             except Exception as e:
                 self.logger.error(f"Error setting max resolution: {e}")
+                return jsonify({'success': False, 'error': str(e)}), 500
+
+        @self.app.route('/api/perspective/enable', methods=['POST'])
+        def set_perspective_enabled():
+            """Enable/disable perspective transform and persist to active config."""
+            if not self.mqtt_client:
+                return jsonify({'success': False, 'error': 'MQTT not connected'}), 500
+
+            try:
+                data = request.get_json() or {}
+                value = bool(data.get('value', False))
+                result = self.mqtt_client._send_command('set_perspective_transform_enabled', value=value)
+                self._persist_config_change('Camera', 'enable_perspective_transform', str(value))
+                self._persist_config_change('Camera', 'enable_perspective_trasnform', str(value))
+                return jsonify(result)
+            except Exception as e:
+                self.logger.error(f"Error updating perspective enable: {e}")
+                return jsonify({'success': False, 'error': str(e)}), 500
+
+        @self.app.route('/api/perspective/autocalibrate', methods=['POST'])
+        def perspective_autocalibrate():
+            """Start chessboard-based perspective autocalibration on owl.py."""
+            if not self.mqtt_client:
+                return jsonify({'success': False, 'error': 'MQTT not connected'}), 500
+
+            try:
+                data = request.get_json() or {}
+                captures = data.get('captures', 30)
+                try:
+                    captures = max(4, int(captures))
+                except (TypeError, ValueError):
+                    captures = 30
+
+                result = self.mqtt_client._send_command(
+                    'start_perspective_autocalibration', captures=captures)
+
+                # Keep config enabled so transform is applied on next successful calibration.
+                self._persist_config_change('Camera', 'enable_perspective_transform', 'True')
+                self._persist_config_change('Camera', 'enable_perspective_trasnform', 'True')
+
+                if result.get('success'):
+                    result['message'] = (
+                        f"Autocalibration started ({captures} validated captures). "
+                        f"Images and matrices are saved in /owl_data/calibration."
+                    )
+                return jsonify(result)
+            except Exception as e:
+                self.logger.error(f"Error starting perspective autocalibration: {e}")
+                return jsonify({'success': False, 'error': str(e)}), 500
+
+        @self.app.route('/api/perspective/autocalibrate/cancel', methods=['POST'])
+        def cancel_perspective_autocalibrate():
+            """Cancel chessboard autocalibration on owl.py."""
+            if not self.mqtt_client:
+                return jsonify({'success': False, 'error': 'MQTT not connected'}), 500
+
+            try:
+                result = self.mqtt_client._send_command('cancel_perspective_autocalibration')
+                if result.get('success'):
+                    result['message'] = 'Autocalibration cancel requested.'
+                return jsonify(result)
+            except Exception as e:
+                self.logger.error(f"Error cancelling perspective autocalibration: {e}")
                 return jsonify({'success': False, 'error': str(e)}), 500
 
         @self.app.route('/api/download_frame', methods=['POST'])

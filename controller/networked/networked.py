@@ -861,6 +861,31 @@ class CentralController:
                 for oid in self.owls_state:
                     self.desired_state.setdefault(oid, {})['tracking_enabled'] = value
 
+        elif action == 'set_perspective_transform_enabled':
+            enabled = bool(value)
+            payload = {'action': 'set_perspective_transform_enabled', 'value': enabled}
+            self.desired_state.setdefault('all', {})['enable_perspective_transform'] = enabled
+            with self.mqtt_lock:
+                for oid in self.owls_state:
+                    self.desired_state.setdefault(oid, {})['enable_perspective_transform'] = enabled
+
+        elif action == 'start_perspective_autocalibration':
+            captures = 30
+            if isinstance(value, dict):
+                try:
+                    captures = max(4, int(value.get('captures', 30)))
+                except (TypeError, ValueError):
+                    captures = 30
+            elif value is not None:
+                try:
+                    captures = max(4, int(value))
+                except (TypeError, ValueError):
+                    captures = 30
+            payload = {'action': 'start_perspective_autocalibration', 'captures': captures}
+
+        elif action == 'cancel_perspective_autocalibration':
+            payload = {'action': 'cancel_perspective_autocalibration'}
+
         elif action == 'set_sensitivity':
             payload = {'action': 'set_sensitivity_level', 'level': value}
 

@@ -140,6 +140,13 @@ class OWLMQTTPublisher:
             # Camera resolution
             'resolution_width': 0,
             'resolution_height': 0,
+            # Perspective transform
+            'enable_perspective_transform': False,
+            'perspective_calibration_status': 'idle',
+            'perspective_calibration_progress': 0,
+            'perspective_calibration_target': 30,
+            'perspective_calibration_captured': 0,
+            'perspective_calibration_error': '',
             # Model download state
             'model_download': {
                 'status': 'idle',
@@ -266,6 +273,20 @@ class OWLMQTTPublisher:
             res = getattr(self.owl_instance, 'resolution', (0, 0))
             self.state['resolution_width'] = res[0]
             self.state['resolution_height'] = res[1]
+
+            # Perspective transform state
+            self.state['enable_perspective_transform'] = getattr(
+                self.owl_instance, 'enable_perspective_transform', False)
+            self.state['perspective_calibration_status'] = getattr(
+                self.owl_instance, '_perspective_status', 'idle')
+            self.state['perspective_calibration_progress'] = getattr(
+                self.owl_instance, '_perspective_progress', 0)
+            self.state['perspective_calibration_target'] = getattr(
+                self.owl_instance, '_perspective_target', 30)
+            self.state['perspective_calibration_captured'] = getattr(
+                self.owl_instance, '_perspective_captured', 0)
+            self.state['perspective_calibration_error'] = getattr(
+                self.owl_instance, '_perspective_last_error', '')
 
             # Check model availability (any NCNN dirs or .pt files in models/)
             self.state['model_available'] = self._check_model_available()
@@ -691,6 +712,48 @@ class OWLMQTTPublisher:
                             gog._crop_stabilizer = self.owl_instance._crop_stabilizer
                 self.logger.info(f"Tracking {'enabled' if value else 'disabled'}")
                 self._publish_state()
+
+            elif action == 'set_perspective_transform_enabled':
+                raw = command.get('value', False)
+                value = raw if isinstance(raw, bool) else str(raw).lower() == 'true'
+                self.state['enable_perspective_transform'] = value
+                if self.owl_instance:
+                    self.owl_instance.enable_perspective_transform = value
+                    if hasattr(self.owl_instance, 'config'):
+                        if not self.owl_instance.config.has_section('Camera'):
+                            self.owl_instance.config.add_section('Camera')
+                        self.owl_instance.config.set('Camera', 'enable_perspective_transform', str(value))
+                        self.owl_instance.config.set('Camera', 'enable_perspective_trasnform', str(value))
+                self.logger.info(f"Perspective transform {'enabled' if value else 'disabled'}")
+
+            elif action == 'start_perspective_autocalibration':
+                captures = command.get('captures', 30)
+                try:
+                    captures = max(4, int(captures))
+                except (TypeError, ValueError):
+                    captures = 30
+
+                if self.owl_instance and hasattr(self.owl_instance, 'request_perspective_autocalibration'):
+                    self.owl_instance.request_perspective_autocalibration(captures=captures)
+                    self.state['perspective_calibration_status'] = 'capturing'
+                    self.state['perspective_calibration_progress'] = 0
+                    self.state['perspective_calibration_target'] = captures
+                    self.state['perspective_calibration_captured'] = 0
+                    self.state['perspective_calibration_error'] = ''
+                    self.logger.info(
+                        f"Perspective autocalibration requested: captures={captures}")
+                else:
+                    self.logger.error("Cannot start perspective autocalibration: OWL instance not ready")
+
+            elif action == 'cancel_perspective_autocalibration':
+                cancelled = False
+                if self.owl_instance and hasattr(self.owl_instance, 'cancel_perspective_autocalibration'):
+                    cancelled = self.owl_instance.cancel_perspective_autocalibration()
+
+                self.state['perspective_calibration_status'] = 'cancelled' if cancelled else 'idle'
+                self.state['perspective_calibration_error'] = ''
+                self.logger.info(
+                    f"Perspective autocalibration cancel requested (cancelled={cancelled})")
 
             elif action == 'set_session_metadata':
                 metadata = {
@@ -1655,6 +1718,20 @@ class OWLMQTTPublisher:
                 self.state['detect_classes'] = pending
             else:
                 self.state['detect_classes'] = getattr(self.owl_instance, '_detect_classes_list', [])
+
+            # Refresh perspective autocalibration state continuously
+            self.state['enable_perspective_transform'] = getattr(
+                self.owl_instance, 'enable_perspective_transform', False)
+            self.state['perspective_calibration_status'] = getattr(
+                self.owl_instance, '_perspective_status', 'idle')
+            self.state['perspective_calibration_progress'] = getattr(
+                self.owl_instance, '_perspective_progress', 0)
+            self.state['perspective_calibration_target'] = getattr(
+                self.owl_instance, '_perspective_target', 30)
+            self.state['perspective_calibration_captured'] = getattr(
+                self.owl_instance, '_perspective_captured', 0)
+            self.state['perspective_calibration_error'] = getattr(
+                self.owl_instance, '_perspective_last_error', '')
             self.state['available_models'] = self._list_available_models()
 
     def _publish_state(self):

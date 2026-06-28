@@ -67,7 +67,14 @@ class ConfigValidator:
         },
         'Camera': {
             'required_keys': {'resolution_width', 'resolution_height'},
-            'optional_keys': {'exp_compensation', 'crop_factor_horizontal', 'crop_factor_vertical', 'camera_type'}
+            'optional_keys': {
+                'exp_compensation',
+                'crop_factor_horizontal',
+                'crop_factor_vertical',
+                'camera_type',
+                'enable_perspective_transform',
+                'enable_perspective_trasnform',
+            }
         },
         'GreenOnGreen': {
             'required_keys': {'model_path', 'confidence'},
@@ -136,6 +143,8 @@ class ConfigValidator:
         'log_fps': ('bool', None, None),
         'invert_hue': ('bool', None, None),
         'tracking_enabled': ('bool', None, None),
+        'enable_perspective_transform': ('bool', None, None),
+        'enable_perspective_trasnform': ('bool', None, None),
     }
 
     VALID_ALGORITHMS = {'exg', 'exgr', 'maxg', 'nexg', 'exhsv', 'hsv', 'gndvi', 'gog', 'gog-hybrid'}

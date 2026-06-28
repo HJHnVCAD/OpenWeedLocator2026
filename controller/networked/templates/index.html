@@ -135,6 +135,18 @@
                             Start Recording
                         </button>
                         <div class="hero-split-row">
+                            <button class="action-button" id="main-perspective-btn" onclick="togglePerspectiveCalibration()">
+                                Start Calibration
+                            </button>
+                            <button class="action-button" id="main-perspective-cancel-btn" onclick="cancelPerspectiveCalibration()">
+                                Cancel Calibration
+                            </button>
+                        </div>
+                        <button class="action-button" id="main-perspective-toggle-btn" onclick="togglePerspectiveTransform()">
+                            Perspective: OFF
+                        </button>
+                        <div class="tile-subtle" id="main-perspective-state">Perspective: idle</div>
+                        <div class="hero-split-row">
                             <button class="action-button btn-nozzles" id="main-nozzles-btn" onclick="toggleAllNozzles()">
                                 All Nozzles
                             </button>

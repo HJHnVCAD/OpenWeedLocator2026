@@ -228,6 +228,34 @@ function toggleTracking() {
 }
 
 // ============================================
+// PERSPECTIVE CALIBRATION (ALL OWLs)
+// ============================================
+
+function togglePerspectiveCalibration() {
+    sendCommand('all', 'start_perspective_autocalibration', { captures: 30 });
+    showToast('Perspective autocalibration started on all connected OWLs', 'info');
+}
+
+function cancelPerspectiveCalibration() {
+    sendCommand('all', 'cancel_perspective_autocalibration', true);
+    showToast('Perspective autocalibration cancel requested', 'info');
+}
+
+function togglePerspectiveTransform() {
+    var firstOwl = null;
+    for (var id in owlsData) {
+        if (owlsData[id] && owlsData[id].connected) {
+            firstOwl = owlsData[id];
+            break;
+        }
+    }
+
+    var current = !!(firstOwl && firstOwl.enable_perspective_transform);
+    sendCommand('all', 'set_perspective_transform_enabled', !current);
+    showToast((current ? 'Disabled' : 'Enabled') + ' perspective transform on all connected OWLs', 'info');
+}
+
+// ============================================
 // TRACK STABILITY
 // ============================================
 

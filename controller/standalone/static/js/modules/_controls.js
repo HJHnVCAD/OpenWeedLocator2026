@@ -67,6 +67,32 @@ function initDashboardControls() {
         });
     }
 
+    // Perspective autocalibration
+    const calibBtn = document.getElementById('perspectiveCalibrateBtn');
+    if (calibBtn) {
+        calibBtn.addEventListener('click', () => {
+            startPerspectiveAutocalibration(30)
+                .catch(err => showNotification('Error', err.message || 'Autocalibration failed to start', 'error'));
+        });
+    }
+
+    const perspectiveToggleBtn = document.getElementById('perspectiveToggleBtn');
+    if (perspectiveToggleBtn) {
+        perspectiveToggleBtn.addEventListener('click', () => {
+            const isOn = perspectiveToggleBtn.getAttribute('aria-pressed') === 'true';
+            togglePerspectiveTransform(!isOn)
+                .catch(err => showNotification('Error', err.message || 'Perspective toggle failed', 'error'));
+        });
+    }
+
+    const calibCancelBtn = document.getElementById('perspectiveCancelBtn');
+    if (calibCancelBtn) {
+        calibCancelBtn.addEventListener('click', () => {
+            cancelPerspectiveAutocalibration()
+                .catch(err => showNotification('Error', err.message || 'Cancel request failed', 'error'));
+        });
+    }
+
     // Sensitivity presets — bind static buttons, then fetch dynamic list
     bindSensitivityButtons();
     fetchSensitivityPresets();
@@ -480,6 +506,81 @@ function stopAllNozzles() {
         })
         .catch(error => {
             showNotification('Error', error.message || 'Failed to turn off nozzles', 'error');
+        });
+}
+
+/* --------------------------------------------------------------------------
+   Perspective Autocalibration
+   -------------------------------------------------------------------------- */
+
+function startPerspectiveAutocalibration(captures) {
+    const btn = document.getElementById('perspectiveCalibrateBtn');
+    if (btn) btn.disabled = true;
+
+    showNotification(
+        'Info',
+        'Perspective autocalibration started. Present the 9x6 checkerboard until 30 validated captures are collected.',
+        'info',
+        7000
+    );
+
+    return apiRequest('/api/perspective/autocalibrate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ captures: captures || 30 })
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to start perspective autocalibration');
+            }
+
+            showNotification('Success', data.message || 'Autocalibration started', 'success', 5000);
+            updateSystemStats();
+        })
+        .finally(() => {
+            setTimeout(() => {
+                if (btn) btn.disabled = false;
+            }, 1200);
+        });
+}
+
+function cancelPerspectiveAutocalibration() {
+    return apiRequest('/api/perspective/autocalibrate/cancel', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to cancel autocalibration');
+            }
+            showNotification('Info', data.message || 'Autocalibration cancelled', 'info', 2500);
+            updateSystemStats();
+        });
+}
+
+function togglePerspectiveTransform(enabled) {
+    const btn = document.getElementById('perspectiveToggleBtn');
+    if (btn) btn.disabled = true;
+
+    return apiRequest('/api/perspective/enable', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ value: !!enabled })
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to update perspective transform');
+            }
+            showNotification('Success', enabled ? 'Perspective enabled' : 'Perspective disabled', 'success', 2500);
+            updateSystemStats();
+        })
+        .finally(() => {
+            setTimeout(() => {
+                if (btn) btn.disabled = false;
+            }, 800);
         });
 }
 
