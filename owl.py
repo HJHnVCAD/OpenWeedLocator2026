@@ -716,11 +716,31 @@ class Owl:
 
             out_w = int(self.frame_width or image_size[0])
             out_h = int(self.frame_height or image_size[1])
+
+            # Build a destination rectangle that preserves the source scale near
+            # the bottom of the image instead of stretching to the full frame.
+            src_top_width = float(np.linalg.norm(src[1] - src[0]))
+            src_bottom_width = float(np.linalg.norm(src[2] - src[3]))
+            src_left_height = float(np.linalg.norm(src[3] - src[0]))
+            src_right_height = float(np.linalg.norm(src[2] - src[1]))
+
+            target_width = max(src_bottom_width, 1.0)
+            target_height = max((src_left_height + src_right_height) / 2.0, 1.0)
+
+            # Keep destination within output bounds.
+            target_width = min(target_width, float(max(out_w - 1, 1)))
+            target_height = min(target_height, float(max(out_h - 1, 1)))
+
+            x0 = (out_w - target_width) / 2.0
+            x1 = x0 + target_width - 1.0
+            y1 = float(out_h - 1)
+            y0 = max(0.0, y1 - target_height + 1.0)
+
             dst = np.float32([
-                [0, 0],
-                [out_w - 1, 0],
-                [out_w - 1, out_h - 1],
-                [0, out_h - 1],
+                [x0, y0],
+                [x1, y0],
+                [x1, y1],
+                [x0, y1],
             ])
 
             perspective_matrix = cv2.getPerspectiveTransform(src, dst)
@@ -737,6 +757,10 @@ class Owl:
                 'square_size_mm': self._autocalib_square_size_mm,
                 'calibration_rms': float(rms),
                 'output_size': [out_w, out_h],
+                'source_top_width_px': src_top_width,
+                'source_bottom_width_px': src_bottom_width,
+                'destination_width_px': target_width,
+                'destination_height_px': target_height,
             }
             with open(os.path.join(cal_dir, 'calibration_meta.json'), 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, indent=2)
